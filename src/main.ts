@@ -16,14 +16,31 @@ if (!ctx) {
   throw new Error("Failed to get 2d context from canvas");
 }
 
+interface Point {
+    x: number;
+    y: number;
+}
+type Line = Point[];
+
 // Create global variables
 const cursor = { isDrawing: false, x: 0, y: 0 };
+
+const lines: Line[] = [];
+let currentLine: Line = [];
+
+const drawingChanged: Event = new Event("drawing-changed");
 
 // Add the event listeners for mousedown, mousemove, and mouseup
 canvas.addEventListener("mousedown", (e) => {
     cursor.isDrawing = true;
     cursor.x = e.offsetX;
     cursor.y = e.offsetY;
+
+    currentLine = [];
+    lines.push(currentLine);
+    currentLine.push({ x: cursor.x, y: cursor.y } as Point);
+
+    canvas.dispatchEvent(drawingChanged);
   });
   
 canvas.addEventListener("mousemove", (e) => {
@@ -31,17 +48,29 @@ if (cursor.isDrawing) {
     drawLine(ctx, cursor.x, cursor.y, e.offsetX, e.offsetY);
     cursor.x = e.offsetX;
     cursor.y = e.offsetY;
+
+    currentLine.push({ x: cursor.x, y: cursor.y } as Point);
+
+    canvas.dispatchEvent(drawingChanged);
 }
 });
   
-addEventListener("mouseup", (e) => {
+canvas.addEventListener("mouseup", () => {
 if (cursor.isDrawing) {
-    drawLine(ctx, cursor.x, cursor.y, e.offsetX, e.offsetY);
-    cursor.x = 0;
-    cursor.y = 0;
     cursor.isDrawing = false;
+
+    currentLine = [];
+
+    canvas.dispatchEvent(drawingChanged);
 }
 });
+
+canvas.addEventListener("drawing-changed", () => {
+    clearCanvas(ctx);
+    redraw(ctx);
+});
+
+app.append(document.createElement("br"));
 
 // Create clear button
 const clearButton = document.createElement("button");
@@ -49,13 +78,14 @@ clearButton.innerHTML = "Clear";
 app.append(clearButton);
 
 clearButton.addEventListener("click", () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    clearCanvas(ctx);
+    lines.splice(0, lines.length);
 });
 
 
 // ----------------------------- Functions -----------------------------
 
-
+// Draw line from (x1, y1) to (x2, y2)
 function drawLine(context: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
     context.beginPath();
     context.strokeStyle = "black";
@@ -64,4 +94,22 @@ function drawLine(context: CanvasRenderingContext2D, x1: number, y1: number, x2:
     context.lineTo(x2, y2);
     context.stroke();
     context.closePath();
+}
+
+function clearCanvas(ctx: CanvasRenderingContext2D) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function redraw(ctx: CanvasRenderingContext2D) {
+    for (const line of lines) {
+        if (line.length > 1) {
+            ctx.beginPath();
+            const point: Point = line[0];
+            ctx.moveTo(point.x, point.y);
+            for (const point of line) {
+                ctx.lineTo(point.x, point.y);
+            }
+            ctx.stroke();
+        }
+    }
 }

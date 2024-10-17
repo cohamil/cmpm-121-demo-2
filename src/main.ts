@@ -16,6 +16,7 @@ if (!ctx) {
   throw new Error("Failed to get 2d context from canvas");
 }
 
+// Point and Line types
 interface Point {
     x: number;
     y: number;
@@ -26,6 +27,7 @@ type Line = Point[];
 const cursor = { isDrawing: false, x: 0, y: 0 };
 
 const lines: Line[] = [];
+const redoLines: Line[] = [];
 let currentLine: Line = [];
 
 const drawingChanged: Event = new Event("drawing-changed");
@@ -38,7 +40,8 @@ canvas.addEventListener("mousedown", (e) => {
 
     currentLine = [];
     lines.push(currentLine);
-    currentLine.push({ x: cursor.x, y: cursor.y } as Point);
+    redoLines.splice(0, redoLines.length);
+    currentLine.push({ x: cursor.x, y: cursor.y });
 
     canvas.dispatchEvent(drawingChanged);
   });
@@ -49,7 +52,7 @@ if (cursor.isDrawing) {
     cursor.x = e.offsetX;
     cursor.y = e.offsetY;
 
-    currentLine.push({ x: cursor.x, y: cursor.y } as Point);
+    currentLine.push({ x: cursor.x, y: cursor.y });
 
     canvas.dispatchEvent(drawingChanged);
 }
@@ -65,6 +68,7 @@ if (cursor.isDrawing) {
 }
 });
 
+// Add event listener for drawing-changed event
 canvas.addEventListener("drawing-changed", () => {
     clearCanvas(ctx);
     redraw(ctx);
@@ -80,6 +84,34 @@ app.append(clearButton);
 clearButton.addEventListener("click", () => {
     clearCanvas(ctx);
     lines.splice(0, lines.length);
+});
+
+// Create undo button
+const undoButton = document.createElement("button");
+undoButton.innerHTML = "Undo";
+app.append(undoButton);
+
+undoButton.addEventListener("click", () => {
+if (lines.length > 0) {
+    const line = lines.pop();
+    if (line) redoLines.push(line);
+    
+    canvas.dispatchEvent(drawingChanged);
+}
+});
+
+// Create redo button
+const redoButton = document.createElement("button");
+redoButton.innerHTML = "Redo";
+app.append(redoButton);
+
+redoButton.addEventListener("click", () => {
+if (redoLines.length > 0) {
+    const line = redoLines.pop();
+    if (line) lines.push(line);
+
+    canvas.dispatchEvent(drawingChanged);
+}
 });
 
 

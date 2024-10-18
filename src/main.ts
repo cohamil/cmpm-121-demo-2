@@ -23,46 +23,71 @@ interface Point {
 }
 type Line = Point[];
 
-// Create global variables
-const cursor = { isDrawing: false, x: 0, y: 0 };
+// Structure for a line
+interface LineStructure {
+    line: Line;
+    drag(point: Point): void;
+    display(ctx: CanvasRenderingContext2D): void;
+}
 
-const lines: Line[] = [];
-const redoLines: Line[] = [];
-let currentLine: Line = [];
+// Line class that implements LineStructure
+class MarkerLine implements LineStructure {
+    line: Line;
+
+    constructor(point: Point) {
+        this.line = [point];
+    }
+    drag(point: Point) {
+        this.line.push(point);
+    }
+    display(ctx: CanvasRenderingContext2D) {
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const point: Point = this.line[0];
+        ctx.moveTo(point.x, point.y);
+        for (const point of this.line) {
+            ctx.lineTo(point.x, point.y);
+        }
+        ctx.stroke();
+        ctx.closePath();
+        
+    }
+}
+
+// Create global variables
+let isDrawing = false;
+
+const lines: MarkerLine[] = [];
+const redoLines: MarkerLine[] = [];
+let currentLine: MarkerLine | null = null;
 
 const drawingChanged: Event = new Event("drawing-changed");
 
 // Add the event listeners for mousedown, mousemove, and mouseup
 canvas.addEventListener("mousedown", (e) => {
-    cursor.isDrawing = true;
-    cursor.x = e.offsetX;
-    cursor.y = e.offsetY;
+    isDrawing = true;
 
-    currentLine = [];
+    currentLine = new MarkerLine({ x: e.offsetX, y: e.offsetY });
     lines.push(currentLine);
     redoLines.splice(0, redoLines.length);
-    currentLine.push({ x: cursor.x, y: cursor.y });
-
+    
     canvas.dispatchEvent(drawingChanged);
   });
   
 canvas.addEventListener("mousemove", (e) => {
-if (cursor.isDrawing) {
-    drawLine(ctx, cursor.x, cursor.y, e.offsetX, e.offsetY);
-    cursor.x = e.offsetX;
-    cursor.y = e.offsetY;
-
-    currentLine.push({ x: cursor.x, y: cursor.y });
+if (isDrawing) {
+    if (currentLine) currentLine.drag({ x: e.offsetX, y: e.offsetY });
 
     canvas.dispatchEvent(drawingChanged);
 }
 });
   
 canvas.addEventListener("mouseup", () => {
-if (cursor.isDrawing) {
-    cursor.isDrawing = false;
+if (isDrawing) {
+    isDrawing = false;
 
-    currentLine = [];
+    currentLine = null;
 
     canvas.dispatchEvent(drawingChanged);
 }
@@ -70,7 +95,6 @@ if (cursor.isDrawing) {
 
 // Add event listener for drawing-changed event
 canvas.addEventListener("drawing-changed", () => {
-    clearCanvas(ctx);
     redraw(ctx);
 });
 
@@ -82,8 +106,8 @@ clearButton.innerHTML = "Clear";
 app.append(clearButton);
 
 clearButton.addEventListener("click", () => {
-    clearCanvas(ctx);
     lines.splice(0, lines.length);
+    canvas.dispatchEvent(drawingChanged);
 });
 
 // Create undo button
@@ -117,31 +141,11 @@ if (redoLines.length > 0) {
 
 // ----------------------------- Functions -----------------------------
 
-// Draw line from (x1, y1) to (x2, y2)
-function drawLine(context: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
-    context.beginPath();
-    context.strokeStyle = "black";
-    context.lineWidth = 1;
-    context.moveTo(x1, y1);
-    context.lineTo(x2, y2);
-    context.stroke();
-    context.closePath();
-}
-
-function clearCanvas(ctx: CanvasRenderingContext2D) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
 function redraw(ctx: CanvasRenderingContext2D) {
-    for (const line of lines) {
-        if (line.length > 1) {
-            ctx.beginPath();
-            const point: Point = line[0];
-            ctx.moveTo(point.x, point.y);
-            for (const point of line) {
-                ctx.lineTo(point.x, point.y);
-            }
-            ctx.stroke();
-        }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lines.forEach((line) => line.display(ctx));
+
+    if (currentLine) {
+        currentLine.display(ctx);
     }
 }

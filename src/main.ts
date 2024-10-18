@@ -10,12 +10,13 @@ app.append(header);
 
 // create canvas
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+canvas.style.cursor = "none";
 app.append(canvas);
 const ctx = canvas.getContext("2d");
 if (!ctx) {
   throw new Error("Failed to get 2d context from canvas");
 }
-const defaultLineWidth = 3;
+const defaultLineWidth = 4;
 let currentLineWidth = defaultLineWidth;
 ctx.lineWidth = defaultLineWidth;
 
@@ -61,12 +62,36 @@ class MarkerLine implements LineStructure {
     }
 }
 
+// Structure for a cursor
+interface CursorStructure {
+    point: Point;
+    display(ctx: CanvasRenderingContext2D): void;
+}
+
+// Cursor class that implements CursorStructure
+class CursorPoint implements CursorStructure {
+    point: Point;
+
+    constructor(point: Point) {
+        this.point = point;
+    }
+    display(ctx: CanvasRenderingContext2D): void {
+        const tool = toolData.currentTool;
+        ctx.font = `${tool.getThickness() * 4}px monospace`;
+        ctx.fillText("o", this.point.x - tool.getOffset().x, this.point.y + tool.getOffset().y);
+    }
+}
+
+
 // Structure for a tool
 interface ToolStructure {
     thickness: number;
     name: string;
     button: HTMLButtonElement;
+    offset: Point;
     getButton(): HTMLButtonElement;
+    getThickness(): number;
+    getOffset(): Point;
 }
 
 // Tool class that implements ToolStructure
@@ -74,10 +99,12 @@ class SelectedTool implements ToolStructure {
     thickness: number;
     name: string;
     button: HTMLButtonElement;
+    offset: Point;
 
-    constructor(thickness: number, name: string) {
+    constructor(thickness: number, name: string, offset: Point) {
         this.thickness = thickness;
         this.name = name;
+        this.offset = offset;
 
         const toolButton = document.createElement("button");
         this.button = toolButton;
@@ -96,6 +123,12 @@ class SelectedTool implements ToolStructure {
     getButton(): HTMLButtonElement {
         return this.button;
     }
+    getThickness(): number {
+        return this.thickness;
+    }
+    getOffset(): Point {
+        return this.offset;
+    }
 }
 
 // Create global variables
@@ -105,9 +138,13 @@ const lines: MarkerLine[] = [];
 const redoLines: MarkerLine[] = [];
 let currentLine: MarkerLine | null = null;
 
-const drawingChanged: Event = new Event("drawing-changed");
+let cursorPoint: CursorPoint | null = null;
 
-// Add the event listeners for mousedown, mousemove, and mouseup
+// Custom events
+const drawingChanged: Event = new Event("drawing-changed");
+const toolMoved:Event = new Event("tool-moved");
+
+// Add the event listeners for mouse actions
 canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
 
@@ -119,27 +156,46 @@ canvas.addEventListener("mousedown", (e) => {
   });
   
 canvas.addEventListener("mousemove", (e) => {
-if (isDrawing) {
-    if (currentLine) currentLine.drag({ x: e.offsetX, y: e.offsetY });
+    cursorPoint = new CursorPoint({ x: e.offsetX, y: e.offsetY });
+    canvas.dispatchEvent(toolMoved);
+    
+    if (isDrawing) {
+        if (currentLine) currentLine.drag({ x: e.offsetX, y: e.offsetY });
 
-    canvas.dispatchEvent(drawingChanged);
-}
+        canvas.dispatchEvent(drawingChanged);
+    }
 });
   
 canvas.addEventListener("mouseup", () => {
-if (isDrawing) {
-    isDrawing = false;
+    if (isDrawing) {
+        isDrawing = false;
 
-    currentLine = null;
+        currentLine = null;
 
-    canvas.dispatchEvent(drawingChanged);
-}
+        canvas.dispatchEvent(drawingChanged);
+    }
+});
+
+canvas.addEventListener("mouseout", () => {
+    cursorPoint = null;
+    canvas.dispatchEvent(toolMoved);
+});
+
+canvas.addEventListener("mouseenter", (e) => {
+    cursorPoint = new CursorPoint({ x: e.offsetX, y: e.offsetY });
+    canvas.dispatchEvent(toolMoved);
 });
 
 // Add event listener for drawing-changed event
 canvas.addEventListener("drawing-changed", () => {
     redraw(ctx);
 });
+
+// Add event listener for tool-moved event
+canvas.addEventListener("tool-moved", () => {
+    redraw(ctx);
+});
+
 
 app.append(document.createElement("br"));
 
@@ -184,9 +240,9 @@ if (redoLines.length > 0) {
 app.append(document.createElement("br"));
 
 // Create tool buttons
-const thinMarker = new SelectedTool(1, "Thin");
-const defaultMarker = new SelectedTool(defaultLineWidth, "Default");
-const thickMarker = new SelectedTool(7, "Thick");
+const thinMarker = new SelectedTool(2, "Thin", { x: 2, y: 2 });
+const defaultMarker = new SelectedTool(defaultLineWidth, "Default", { x: 5, y: 3 });
+const thickMarker = new SelectedTool(8, "Thick", { x: 9, y: 7 });
 
 const defButtonColor = getComputedStyle(document.querySelector("button")!).getPropertyValue("background-color");
 const selectedButtonColor = "lightblue";
@@ -204,7 +260,7 @@ function redraw(ctx: CanvasRenderingContext2D) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     lines.forEach((line) => line.display(ctx));
 
-    if (currentLine) {
-        currentLine.display(ctx);
+    if (cursorPoint) {
+        cursorPoint.display(ctx);
     }
 }

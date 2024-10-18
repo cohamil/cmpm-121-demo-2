@@ -15,6 +15,9 @@ const ctx = canvas.getContext("2d");
 if (!ctx) {
   throw new Error("Failed to get 2d context from canvas");
 }
+const defaultLineWidth = 3;
+let currentLineWidth = defaultLineWidth;
+ctx.lineWidth = defaultLineWidth;
 
 // Point and Line types
 interface Point {
@@ -26,6 +29,7 @@ type Line = Point[];
 // Structure for a line
 interface LineStructure {
     line: Line;
+    lineWidth: number;
     drag(point: Point): void;
     display(ctx: CanvasRenderingContext2D): void;
 }
@@ -33,16 +37,18 @@ interface LineStructure {
 // Line class that implements LineStructure
 class MarkerLine implements LineStructure {
     line: Line;
+    lineWidth: number;
 
-    constructor(point: Point) {
+    constructor(point: Point, lineWidth: number) {
         this.line = [point];
+        this.lineWidth = lineWidth;
     }
     drag(point: Point) {
         this.line.push(point);
     }
     display(ctx: CanvasRenderingContext2D) {
         ctx.strokeStyle = "black";
-        ctx.lineWidth = 1;
+        ctx.lineWidth = this.lineWidth;
         ctx.beginPath();
         const point: Point = this.line[0];
         ctx.moveTo(point.x, point.y);
@@ -52,6 +58,43 @@ class MarkerLine implements LineStructure {
         ctx.stroke();
         ctx.closePath();
         
+    }
+}
+
+// Structure for a tool
+interface ToolStructure {
+    thickness: number;
+    name: string;
+    button: HTMLButtonElement;
+    getButton(): HTMLButtonElement;
+}
+
+// Tool class that implements ToolStructure
+class SelectedTool implements ToolStructure {
+    thickness: number;
+    name: string;
+    button: HTMLButtonElement;
+
+    constructor(thickness: number, name: string) {
+        this.thickness = thickness;
+        this.name = name;
+
+        const toolButton = document.createElement("button");
+        this.button = toolButton;
+        toolButton.innerHTML = name;
+        app.append(toolButton);
+
+        toolButton.addEventListener("click", () => {
+            currentLineWidth = this.thickness;
+
+            toolData.currentTool.getButton().style.backgroundColor = defButtonColor;
+            this.button.style.backgroundColor = selectedButtonColor;
+            toolData.currentTool = this;
+        });
+    }
+
+    getButton(): HTMLButtonElement {
+        return this.button;
     }
 }
 
@@ -68,7 +111,7 @@ const drawingChanged: Event = new Event("drawing-changed");
 canvas.addEventListener("mousedown", (e) => {
     isDrawing = true;
 
-    currentLine = new MarkerLine({ x: e.offsetX, y: e.offsetY });
+    currentLine = new MarkerLine({ x: e.offsetX, y: e.offsetY }, currentLineWidth);
     lines.push(currentLine);
     redoLines.splice(0, redoLines.length);
     
@@ -137,6 +180,22 @@ if (redoLines.length > 0) {
     canvas.dispatchEvent(drawingChanged);
 }
 });
+
+app.append(document.createElement("br"));
+
+// Create tool buttons
+const thinMarker = new SelectedTool(1, "Thin");
+const defaultMarker = new SelectedTool(defaultLineWidth, "Default");
+const thickMarker = new SelectedTool(7, "Thick");
+
+const defButtonColor = getComputedStyle(document.querySelector("button")!).getPropertyValue("background-color");
+const selectedButtonColor = "lightblue";
+defaultMarker.getButton().style.backgroundColor = selectedButtonColor;
+
+const toolData = {
+    tools: [thinMarker, defaultMarker, thickMarker],
+    currentTool: defaultMarker,
+};
 
 
 // ----------------------------- Functions -----------------------------

@@ -66,6 +66,7 @@ class MarkerLine implements LineStructure {
 interface CursorStructure {
     point: Point;
     display(ctx: CanvasRenderingContext2D): void;
+    position(): Point;
 }
 
 // Cursor class that implements CursorStructure
@@ -76,9 +77,20 @@ class CursorPoint implements CursorStructure {
         this.point = point;
     }
     display(ctx: CanvasRenderingContext2D): void {
+        if (currentUserState === 'addingSticker') {
+            const sticker = stickerData.currentSticker;
+            if (sticker) ctx.fillText(sticker.emoji, this.point.x, this.point.y);
+            
+            return;
+        }
+        
         const tool = toolData.currentTool;
         ctx.font = `${tool.getThickness() * 4}px monospace`;
         ctx.fillText("o", this.point.x - tool.getOffset().x, this.point.y + tool.getOffset().y);
+    }
+
+    position(): Point {
+        return this.point;
     }
 }
 
@@ -131,12 +143,84 @@ class SelectedTool implements ToolStructure {
     }
 }
 
-// Create global variables
-let isDrawing = false;
+// Structure for a sticker
+interface StickerToolStructure {
+    emoji: string;
+    button: HTMLButtonElement;
+    getButton(): HTMLButtonElement;
+    getEmoji(): string;
+}
 
-const lines: MarkerLine[] = [];
-const redoLines: MarkerLine[] = [];
-let currentLine: MarkerLine | null = null;
+class StickerTool implements StickerToolStructure {
+    emoji: string;
+    button: HTMLButtonElement;
+
+    constructor(emoji: string) {
+        this.emoji = emoji;
+
+        const stickerButton = document.createElement("button");
+        this.button = stickerButton;
+        stickerButton.innerHTML = emoji;
+        app.append(stickerButton);
+
+        stickerButton.addEventListener("click", () => {
+            if (stickerData.currentSticker === this) {
+                currentUserState = 'isIdle';
+                this.button.style.backgroundColor = defButtonColor;
+                stickerData.currentSticker = null;
+                return;
+            }
+            
+            currentUserState = 'addingSticker';
+
+            const curSticker = stickerData.currentSticker;
+            if (curSticker) curSticker.getButton().style.backgroundColor = defButtonColor;
+            this.button.style.backgroundColor = selectedButtonColor;
+            stickerData.currentSticker = this;
+        });
+    }
+
+    // display(ctx: CanvasRenderingContext2D): void {
+    //     if (cursorPoint) ctx.fillText(this.emoji, cursorPoint.position().x, cursorPoint.position().y);
+    // }
+
+    getButton(): HTMLButtonElement {
+        return this.button;
+    }
+    getEmoji(): string {  
+        return this.emoji;
+    }
+}
+
+// Structure for a sticker
+interface StickerStructure {
+    emoji: string;
+    position: Point;
+    display(ctx: CanvasRenderingContext2D): void;
+}
+
+// Sticker class that implements StickerStructure
+class Sticker implements StickerStructure {
+    emoji: string;
+    position: Point;
+    constructor(emoji: string, position: Point) {
+        this.emoji = emoji;
+        this.position = position;
+    }
+    display(ctx: CanvasRenderingContext2D) {
+        ctx.font = "16px monospace";
+        ctx.fillText(this.emoji, this.position.x, this.position.y);
+    }
+}
+
+
+// Create global variables
+type toolState = 'isIdle' | 'isDrawing' | 'addingSticker';
+let currentUserState: toolState = 'isIdle';
+
+const commands: (MarkerLine | Sticker)[] = [];
+const redoCommands: (MarkerLine | Sticker)[] = [];
+let currentCommand: MarkerLine | Sticker | null = null;
 
 let cursorPoint: CursorPoint | null = null;
 
@@ -146,11 +230,17 @@ const toolMoved:Event = new Event("tool-moved");
 
 // Add the event listeners for mouse actions
 canvas.addEventListener("mousedown", (e) => {
-    isDrawing = true;
-
-    currentLine = new MarkerLine({ x: e.offsetX, y: e.offsetY }, currentLineWidth);
-    lines.push(currentLine);
-    redoLines.splice(0, redoLines.length);
+    if (currentUserState === 'addingSticker') {
+        const s = stickerData.currentSticker;
+        if (s) currentCommand = new Sticker(s.getEmoji(), { x: e.offsetX, y: e.offsetY });
+    }
+    else {
+        currentUserState = 'isDrawing';
+        currentCommand = new MarkerLine({ x: e.offsetX, y: e.offsetY }, currentLineWidth);
+    }
+    
+    if (currentCommand) commands.push(currentCommand);
+    redoCommands.splice(0, redoCommands.length);
     
     canvas.dispatchEvent(drawingChanged);
   });
@@ -159,18 +249,21 @@ canvas.addEventListener("mousemove", (e) => {
     cursorPoint = new CursorPoint({ x: e.offsetX, y: e.offsetY });
     canvas.dispatchEvent(toolMoved);
     
-    if (isDrawing) {
-        if (currentLine) currentLine.drag({ x: e.offsetX, y: e.offsetY });
+    if (currentUserState === 'isDrawing') {
+        if (currentCommand) {
+            const line  = currentCommand as MarkerLine;
+            line.drag({ x: e.offsetX, y: e.offsetY });
+        }
 
         canvas.dispatchEvent(drawingChanged);
     }
 });
   
 canvas.addEventListener("mouseup", () => {
-    if (isDrawing) {
-        isDrawing = false;
+    if (currentUserState === 'isDrawing') {
+        currentUserState = 'isIdle';
 
-        currentLine = null;
+        currentCommand = null;
 
         canvas.dispatchEvent(drawingChanged);
     }
@@ -205,7 +298,7 @@ clearButton.innerHTML = "Clear";
 app.append(clearButton);
 
 clearButton.addEventListener("click", () => {
-    lines.splice(0, lines.length);
+    commands.splice(0, commands.length);
     canvas.dispatchEvent(drawingChanged);
 });
 
@@ -215,12 +308,12 @@ undoButton.innerHTML = "Undo";
 app.append(undoButton);
 
 undoButton.addEventListener("click", () => {
-if (lines.length > 0) {
-    const line = lines.pop();
-    if (line) redoLines.push(line);
-    
-    canvas.dispatchEvent(drawingChanged);
-}
+    if (commands.length > 0) {
+        const cmd = commands.pop();
+        if (cmd) redoCommands.push(cmd);
+        
+        canvas.dispatchEvent(drawingChanged);
+    }
 });
 
 // Create redo button
@@ -229,12 +322,12 @@ redoButton.innerHTML = "Redo";
 app.append(redoButton);
 
 redoButton.addEventListener("click", () => {
-if (redoLines.length > 0) {
-    const line = redoLines.pop();
-    if (line) lines.push(line);
+    if (redoCommands.length > 0) {
+        const cmd = redoCommands.pop();
+        if (cmd) commands.push(cmd);
 
-    canvas.dispatchEvent(drawingChanged);
-}
+        canvas.dispatchEvent(drawingChanged);
+    }
 });
 
 app.append(document.createElement("br"));
@@ -253,12 +346,23 @@ const toolData = {
     currentTool: defaultMarker,
 };
 
+app.append(document.createElement("br"));
+
+// Create sticker buttons
+const smileySticker = new StickerTool("😊");
+const heartSticker = new StickerTool("❤️");
+const starSticker = new StickerTool("⭐");
+
+const stickerData = {
+    stickers: [smileySticker, heartSticker, starSticker],
+    currentSticker: null as StickerTool | null,
+}
 
 // ----------------------------- Functions -----------------------------
 
 function redraw(ctx: CanvasRenderingContext2D) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    lines.forEach((line) => line.display(ctx));
+    commands.forEach((cmd) => cmd.display(ctx));
 
     if (cursorPoint) {
         cursorPoint.display(ctx);

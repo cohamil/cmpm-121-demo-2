@@ -180,10 +180,6 @@ class StickerTool implements StickerToolStructure {
         });
     }
 
-    // display(ctx: CanvasRenderingContext2D): void {
-    //     if (cursorPoint) ctx.fillText(this.emoji, cursorPoint.position().x, cursorPoint.position().y);
-    // }
-
     getButton(): HTMLButtonElement {
         return this.button;
     }
@@ -357,6 +353,22 @@ const stickerData = {
     stickers: [smileySticker, heartSticker, starSticker],
     currentSticker: null as StickerTool | null,
 }
+
+app.append(document.createElement("br"));
+
+// Create custom sticker button
+const promptButton = document.createElement("button");
+promptButton.innerHTML = "Create Custom Sticker";
+app.append(promptButton);
+
+promptButton.addEventListener("click", () => {
+    const text = prompt("Custom sticker text", "Insert string/emoji here");
+    if (text) {
+        const customSticker = new StickerTool(text);
+        stickerData.stickers.push(customSticker);
+    }
+
+});
 
 // ----------------------------- Functions -----------------------------
 

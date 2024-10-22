@@ -79,6 +79,7 @@ class CursorPoint implements CursorStructure {
     display(ctx: CanvasRenderingContext2D): void {
         if (currentUserState === 'addingSticker') {
             const sticker = stickerData.currentSticker;
+            ctx.font = "16px monospace";
             if (sticker) ctx.fillText(sticker.emoji, this.point.x, this.point.y);
             
             return;
@@ -192,6 +193,7 @@ class StickerTool implements StickerToolStructure {
 interface StickerStructure {
     emoji: string;
     position: Point;
+    fontSettings: string;
     display(ctx: CanvasRenderingContext2D): void;
 }
 
@@ -199,12 +201,14 @@ interface StickerStructure {
 class Sticker implements StickerStructure {
     emoji: string;
     position: Point;
-    constructor(emoji: string, position: Point) {
+    fontSettings: string;
+    constructor(emoji: string, position: Point, fontSettings: string) {
         this.emoji = emoji;
         this.position = position;
+        this.fontSettings = fontSettings;
     }
     display(ctx: CanvasRenderingContext2D) {
-        ctx.font = "16px monospace";
+        ctx.font = this.fontSettings;
         ctx.fillText(this.emoji, this.position.x, this.position.y);
     }
 }
@@ -220,6 +224,8 @@ let currentCommand: MarkerLine | Sticker | null = null;
 
 let cursorPoint: CursorPoint | null = null;
 
+const stickerSettings = "16px monospace";
+
 // Custom events
 const drawingChanged: Event = new Event("drawing-changed");
 const toolMoved:Event = new Event("tool-moved");
@@ -228,7 +234,7 @@ const toolMoved:Event = new Event("tool-moved");
 canvas.addEventListener("mousedown", (e) => {
     if (currentUserState === 'addingSticker') {
         const s = stickerData.currentSticker;
-        if (s) currentCommand = new Sticker(s.getEmoji(), { x: e.offsetX, y: e.offsetY });
+        if (s) currentCommand = new Sticker(s.getEmoji(), { x: e.offsetX, y: e.offsetY }, stickerSettings);
     }
     else {
         currentUserState = 'isDrawing';
@@ -374,9 +380,11 @@ app.append(document.createElement("br"));
 const smileySticker = new StickerTool("😊");
 const heartSticker = new StickerTool("❤️");
 const starSticker = new StickerTool("⭐");
+const treeSticker = new StickerTool("🌲");
+const grapeSticker = new StickerTool("🍇");
 
 const stickerData = {
-    stickers: [smileySticker, heartSticker, starSticker],
+    stickers: [smileySticker, heartSticker, starSticker, treeSticker, grapeSticker],
     currentSticker: null as StickerTool | null,
 }
 

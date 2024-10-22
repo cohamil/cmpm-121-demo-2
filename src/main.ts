@@ -80,8 +80,18 @@ class CursorPoint implements CursorStructure {
         if (currentUserState === 'addingSticker') {
             const sticker = stickerData.currentSticker;
             ctx.font = "16px monospace";
-            if (sticker) ctx.fillText(sticker.emoji, this.point.x, this.point.y);
-            
+
+            // rotate sticker according to slider value
+            if (sticker) {
+                const angle = Number(slider.value);
+                const radians = angle * (Math.PI / 180);
+
+                ctx.save();
+                ctx.translate(this.point.x, this.point.y);
+                ctx.rotate(radians);
+                ctx.fillText(sticker.emoji, 0, 0);
+                ctx.restore();
+            }
             return;
         }
         
@@ -152,6 +162,7 @@ interface StickerToolStructure {
     getEmoji(): string;
 }
 
+// Stickertool class that implements StickerToolStructure
 class StickerTool implements StickerToolStructure {
     emoji: string;
     button: HTMLButtonElement;
@@ -194,6 +205,7 @@ interface StickerStructure {
     emoji: string;
     position: Point;
     fontSettings: string;
+    rotation: number;
     display(ctx: CanvasRenderingContext2D): void;
 }
 
@@ -202,14 +214,20 @@ class Sticker implements StickerStructure {
     emoji: string;
     position: Point;
     fontSettings: string;
-    constructor(emoji: string, position: Point, fontSettings: string) {
+    rotation: number;
+    constructor(emoji: string, position: Point, fontSettings: string, rotation: number) {
         this.emoji = emoji;
         this.position = position;
         this.fontSettings = fontSettings;
+        this.rotation = rotation;
     }
     display(ctx: CanvasRenderingContext2D) {
+        ctx.save();
         ctx.font = this.fontSettings;
-        ctx.fillText(this.emoji, this.position.x, this.position.y);
+        ctx.translate(this.position.x, this.position.y); 
+        ctx.rotate(this.rotation * Math.PI / 180);
+        ctx.fillText(this.emoji, 0, 0); 
+        ctx.restore(); 
     }
 }
 
@@ -234,7 +252,10 @@ const toolMoved:Event = new Event("tool-moved");
 canvas.addEventListener("mousedown", (e) => {
     if (currentUserState === 'addingSticker') {
         const s = stickerData.currentSticker;
-        if (s) currentCommand = new Sticker(s.getEmoji(), { x: e.offsetX, y: e.offsetY }, stickerSettings);
+        if (s) {
+            const rotation = Number(slider.value);
+            currentCommand = new Sticker(s.getEmoji(), { x: e.offsetX, y: e.offsetY }, stickerSettings, rotation);
+        }
     }
     else {
         currentUserState = 'isDrawing';
@@ -387,6 +408,22 @@ const stickerData = {
     stickers: [smileySticker, heartSticker, starSticker, treeSticker, grapeSticker],
     currentSticker: null as StickerTool | null,
 }
+
+app.append(document.createElement("br"));
+
+// Create sticker rotation slider
+const slider = document.createElement("input");
+slider.type = "range";
+slider.min = "0";
+slider.max = "360";
+slider.step = "1";
+slider.value = "0";
+app.append(slider);
+// add text on same line as slider
+const sliderText = document.createElement("text");
+sliderText.innerHTML = "Sticker Rotation";
+app.append(sliderText);
+
 
 app.append(document.createElement("br"));
 

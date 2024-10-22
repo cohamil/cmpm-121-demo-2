@@ -288,6 +288,32 @@ canvas.addEventListener("tool-moved", () => {
 
 app.append(document.createElement("br"));
 
+// Create export button
+const exportButton = document.createElement("button");
+exportButton.innerHTML = "Export";
+app.append(exportButton);
+
+const canvasScalar = 4;
+exportButton.addEventListener("click", () => {
+    //create temp canvas
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = canvas.width * canvasScalar;
+    tempCanvas.height = canvas.height * canvasScalar;
+    
+    // draw on temp canvas
+    const tempCtx = tempCanvas.getContext("2d");
+    if (tempCtx) {
+        tempCtx.scale(canvasScalar, canvasScalar);
+        redraw(tempCtx);
+    }
+
+    // download temp canvas
+    const a = document.createElement("a");
+    a.href = tempCanvas.toDataURL("image/png");
+    a.download = "sketchpad.png";
+    a.click();
+});
+
 // Create clear button
 const clearButton = document.createElement("button");
 clearButton.innerHTML = "Clear";
@@ -369,6 +395,8 @@ promptButton.addEventListener("click", () => {
     }
 
 });
+
+app.append(document.createElement("br"));
 
 // ----------------------------- Functions -----------------------------
 

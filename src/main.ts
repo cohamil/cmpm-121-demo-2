@@ -1,5 +1,11 @@
 import "./style.css";
 
+const DEFAULT_LINE_WIDTH = 4;      // Original: 4
+const SLIDER_MIN = 0;              // Original min: 0
+const SLIDER_MAX = 360;            // Original max: 360
+const SLIDER_STEP = 1;             // Original step: 1
+const STICKER_FONT_SIZE = 16;      // Original font size: 16
+
 const APP_NAME = "Knockoff MS Paint";
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -12,13 +18,12 @@ app.append(header);
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 canvas.style.cursor = "none";
 app.append(canvas);
-const ctx = canvas.getContext("2d");
-if (!ctx) {
+const context = canvas.getContext("2d");
+if (!context) {
   throw new Error("Failed to get 2d context from canvas");
 }
-const defaultLineWidth = 4;
-let currentLineWidth = defaultLineWidth;
-ctx.lineWidth = defaultLineWidth;
+let currentLineWidth = DEFAULT_LINE_WIDTH;
+context.lineWidth = DEFAULT_LINE_WIDTH;
 
 // Point and Line types
 interface Point {
@@ -32,7 +37,7 @@ interface LineStructure {
     line: Line;
     lineWidth: number;
     drag(point: Point): void;
-    display(ctx: CanvasRenderingContext2D): void;
+    display(context: CanvasRenderingContext2D): void;
 }
 
 // Line class that implements LineStructure
@@ -47,17 +52,17 @@ class MarkerLine implements LineStructure {
     drag(point: Point) {
         this.line.push(point);
     }
-    display(ctx: CanvasRenderingContext2D) {
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = this.lineWidth;
-        ctx.beginPath();
+    display(context: CanvasRenderingContext2D) {
+        context.strokeStyle = "black";
+        context.lineWidth = this.lineWidth;
+        context.beginPath();
         const point: Point = this.line[0];
-        ctx.moveTo(point.x, point.y);
+        context.moveTo(point.x, point.y);
         for (const point of this.line) {
-            ctx.lineTo(point.x, point.y);
+            context.lineTo(point.x, point.y);
         }
-        ctx.stroke();
-        ctx.closePath();
+        context.stroke();
+        context.closePath();
         
     }
 }
@@ -65,7 +70,7 @@ class MarkerLine implements LineStructure {
 // Structure for a cursor
 interface CursorStructure {
     point: Point;
-    display(ctx: CanvasRenderingContext2D): void;
+    display(context: CanvasRenderingContext2D): void;
     position(): Point;
 }
 
@@ -76,28 +81,29 @@ class CursorPoint implements CursorStructure {
     constructor(point: Point) {
         this.point = point;
     }
-    display(ctx: CanvasRenderingContext2D): void {
+    display(context: CanvasRenderingContext2D): void {
         if (currentUserState === 'addingSticker') {
             const sticker = stickerData.currentSticker;
-            ctx.font = "16px monospace";
+            context.font = `${STICKER_FONT_SIZE}px monospace`;
 
             // rotate sticker according to slider value
             if (sticker) {
                 const angle = Number(slider.value);
                 const radians = angle * (Math.PI / 180);
 
-                ctx.save();
-                ctx.translate(this.point.x, this.point.y);
-                ctx.rotate(radians);
-                ctx.fillText(sticker.emoji, 0, 0);
-                ctx.restore();
+                context.save();
+                context.translate(this.point.x, this.point.y);
+                context.rotate(radians);
+                context.fillText(sticker.emoji, 0, 0);
+                context.restore();
             }
             return;
         }
         
         const tool = toolData.currentTool;
-        ctx.font = `${tool.getThickness() * 4}px monospace`;
-        ctx.fillText("o", this.point.x - tool.getOffset().x, this.point.y + tool.getOffset().y);
+        if (!tool) return;
+        context.font = `${tool.getThickness() * 4}px monospace`;
+        context.fillText("o", this.point.x - tool.getOffset().x, this.point.y + tool.getOffset().y);
     }
 
     position(): Point {
@@ -137,7 +143,7 @@ class SelectedTool implements ToolStructure {
         toolButton.addEventListener("click", () => {
             currentLineWidth = this.thickness;
 
-            toolData.currentTool.getButton().style.backgroundColor = defButtonColor;
+            if (toolData.currentTool) toolData.currentTool.getButton().style.backgroundColor = defButtonColor;
             this.button.style.backgroundColor = selectedButtonColor;
             toolData.currentTool = this;
         });
@@ -206,7 +212,7 @@ interface StickerStructure {
     position: Point;
     fontSettings: string;
     rotation: number;
-    display(ctx: CanvasRenderingContext2D): void;
+    display(context: CanvasRenderingContext2D): void;
 }
 
 // Sticker class that implements StickerStructure
@@ -221,13 +227,13 @@ class Sticker implements StickerStructure {
         this.fontSettings = fontSettings;
         this.rotation = rotation;
     }
-    display(ctx: CanvasRenderingContext2D) {
-        ctx.save();
-        ctx.font = this.fontSettings;
-        ctx.translate(this.position.x, this.position.y); 
-        ctx.rotate(this.rotation * Math.PI / 180);
-        ctx.fillText(this.emoji, 0, 0); 
-        ctx.restore(); 
+    display(context: CanvasRenderingContext2D) {
+        context.save();
+        context.font = this.fontSettings;
+        context.translate(this.position.x, this.position.y); 
+        context.rotate(this.rotation * Math.PI / 180);
+        context.fillText(this.emoji, 0, 0); 
+        context.restore(); 
     }
 }
 
@@ -242,24 +248,24 @@ let currentCommand: MarkerLine | Sticker | null = null;
 
 let cursorPoint: CursorPoint | null = null;
 
-const stickerSettings = "16px monospace";
+const stickerSettings = `${STICKER_FONT_SIZE}px monospace`;
 
 // Custom events
 const drawingChanged: Event = new Event("drawing-changed");
 const toolMoved:Event = new Event("tool-moved");
 
 // Add the event listeners for mouse actions
-canvas.addEventListener("mousedown", (e) => {
+canvas.addEventListener("mousedown", (mouseEvent) => {
     if (currentUserState === 'addingSticker') {
-        const s = stickerData.currentSticker;
-        if (s) {
+        const sticker = stickerData.currentSticker;
+        if (sticker) {
             const rotation = Number(slider.value);
-            currentCommand = new Sticker(s.getEmoji(), { x: e.offsetX, y: e.offsetY }, stickerSettings, rotation);
+            currentCommand = new Sticker(sticker.getEmoji(), { x: mouseEvent.offsetX, y: mouseEvent.offsetY }, stickerSettings, rotation);
         }
     }
     else {
         currentUserState = 'isDrawing';
-        currentCommand = new MarkerLine({ x: e.offsetX, y: e.offsetY }, currentLineWidth);
+        currentCommand = new MarkerLine({ x: mouseEvent.offsetX, y: mouseEvent.offsetY }, currentLineWidth);
     }
     
     if (currentCommand) commands.push(currentCommand);
@@ -268,14 +274,14 @@ canvas.addEventListener("mousedown", (e) => {
     canvas.dispatchEvent(drawingChanged);
   });
   
-canvas.addEventListener("mousemove", (e) => {
-    cursorPoint = new CursorPoint({ x: e.offsetX, y: e.offsetY });
+canvas.addEventListener("mousemove", (mouseEvent) => {
+    cursorPoint = new CursorPoint({ x: mouseEvent.offsetX, y: mouseEvent.offsetY });
     canvas.dispatchEvent(toolMoved);
     
     if (currentUserState === 'isDrawing') {
         if (currentCommand) {
-            const line  = currentCommand as MarkerLine;
-            line.drag({ x: e.offsetX, y: e.offsetY });
+            const line = currentCommand as MarkerLine;
+            line.drag({ x: mouseEvent.offsetX, y: mouseEvent.offsetY });
         }
 
         canvas.dispatchEvent(drawingChanged);
@@ -297,19 +303,19 @@ canvas.addEventListener("mouseout", () => {
     canvas.dispatchEvent(toolMoved);
 });
 
-canvas.addEventListener("mouseenter", (e) => {
-    cursorPoint = new CursorPoint({ x: e.offsetX, y: e.offsetY });
+canvas.addEventListener("mouseenter", (mouseEvent) => {
+    cursorPoint = new CursorPoint({ x: mouseEvent.offsetX, y: mouseEvent.offsetY });
     canvas.dispatchEvent(toolMoved);
 });
 
 // Add event listener for drawing-changed event
 canvas.addEventListener("drawing-changed", () => {
-    redraw(ctx);
+    redraw(context);
 });
 
 // Add event listener for tool-moved event
 canvas.addEventListener("tool-moved", () => {
-    redraw(ctx);
+    redraw(context);
 });
 
 
@@ -328,10 +334,10 @@ exportButton.addEventListener("click", () => {
     tempCanvas.height = canvas.height * canvasScalar;
     
     // draw on temp canvas
-    const tempCtx = tempCanvas.getContext("2d");
-    if (tempCtx) {
-        tempCtx.scale(canvasScalar, canvasScalar);
-        redraw(tempCtx);
+    const tempcontext = tempCanvas.getContext("2d");
+    if (tempcontext) {
+        tempcontext.scale(canvasScalar, canvasScalar);
+        redraw(tempcontext);
     }
 
     // download temp canvas
@@ -358,8 +364,8 @@ app.append(undoButton);
 
 undoButton.addEventListener("click", () => {
     if (commands.length > 0) {
-        const cmd = commands.pop();
-        if (cmd) redoCommands.push(cmd);
+        const command = commands.pop();
+        if (command) redoCommands.push(command);
         
         canvas.dispatchEvent(drawingChanged);
     }
@@ -372,8 +378,8 @@ app.append(redoButton);
 
 redoButton.addEventListener("click", () => {
     if (redoCommands.length > 0) {
-        const cmd = redoCommands.pop();
-        if (cmd) commands.push(cmd);
+        const command = redoCommands.pop();
+        if (command) commands.push(command);
 
         canvas.dispatchEvent(drawingChanged);
     }
@@ -381,43 +387,53 @@ redoButton.addEventListener("click", () => {
 
 app.append(document.createElement("br"));
 
-// Create tool buttons
-const thinMarker = new SelectedTool(2, "Thin", { x: 2, y: 2 });
-const defaultMarker = new SelectedTool(defaultLineWidth, "Default", { x: 5, y: 3 });
-const thickMarker = new SelectedTool(8, "Thick", { x: 9, y: 7 });
+// Configuration for tools
+const toolsConfig = [
+    { thickness: 2, name: "Thin", offset: { x: 2, y: 2 } },
+    { thickness: 4, name: "Default", offset: { x: 5, y: 3 } },
+    { thickness: 8, name: "Thick", offset: { x: 9, y: 7 } },
+];
+  
+// Configuration for stickers
+const stickersConfig = [
+    { emoji: "😊" },
+    { emoji: "❤️" },
+    { emoji: "⭐" },
+    { emoji: "🌲" },
+    { emoji: "🍇" },
+];
 
+// Create tools
+const toolData: { tools: SelectedTool[], currentTool: SelectedTool | null } = { tools: [], currentTool: null };
+toolsConfig.forEach(({ thickness, name, offset }) => {
+  const tool = new SelectedTool(thickness, name, offset);
+  toolData.tools.push(tool);
+});
+toolData.currentTool = toolData.tools[1];  // Default tool
+
+// Select default tool
 const defButtonColor = getComputedStyle(document.querySelector("button")!).getPropertyValue("background-color");
 const selectedButtonColor = "lightblue";
-defaultMarker.getButton().style.backgroundColor = selectedButtonColor;
-
-const toolData = {
-    tools: [thinMarker, defaultMarker, thickMarker],
-    currentTool: defaultMarker,
-};
+toolData.currentTool.getButton().style.backgroundColor = selectedButtonColor;
 
 app.append(document.createElement("br"));
 
-// Create sticker buttons
-const smileySticker = new StickerTool("😊");
-const heartSticker = new StickerTool("❤️");
-const starSticker = new StickerTool("⭐");
-const treeSticker = new StickerTool("🌲");
-const grapeSticker = new StickerTool("🍇");
-
-const stickerData = {
-    stickers: [smileySticker, heartSticker, starSticker, treeSticker, grapeSticker],
-    currentSticker: null as StickerTool | null,
-}
+// Create stickers
+const stickerData: { stickers: StickerTool[], currentSticker: StickerTool | null } = { stickers: [], currentSticker: null };
+stickersConfig.forEach(({ emoji }) => {
+  const sticker = new StickerTool(emoji);
+  stickerData.stickers.push(sticker);
+});
 
 app.append(document.createElement("br"));
 
 // Create sticker rotation slider
 const slider = document.createElement("input");
 slider.type = "range";
-slider.min = "0";
-slider.max = "360";
-slider.step = "1";
-slider.value = "0";
+slider.min = SLIDER_MIN.toString();
+slider.max = SLIDER_MAX.toString();
+slider.step = SLIDER_STEP.toString();
+slider.value = slider.min;
 app.append(slider);
 // add text on same line as slider
 const sliderText = document.createElement("text");
@@ -445,11 +461,11 @@ app.append(document.createElement("br"));
 
 // ----------------------------- Functions -----------------------------
 
-function redraw(ctx: CanvasRenderingContext2D) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    commands.forEach((cmd) => cmd.display(ctx));
+function redraw(context: CanvasRenderingContext2D) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    commands.forEach((command) => command.display(context));
 
     if (cursorPoint) {
-        cursorPoint.display(ctx);
+        cursorPoint.display(context);
     }
 }

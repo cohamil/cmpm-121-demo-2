@@ -116,19 +116,21 @@ class CursorPoint implements CursorStructure {
     }
 }
 
+interface BasicToolStructure {
+    button: HTMLButtonElement;
+    getButton(): HTMLButtonElement;
+}
 // Structure for a tool
-interface ToolStructure {
+interface MarkerStructure extends BasicToolStructure {
     thickness: number;
     name: string;
-    button: HTMLButtonElement;
     offset: Point;
-    getButton(): HTMLButtonElement;
     getThickness(): number;
     getOffset(): Point;
 }
 
 // Tool class that implements ToolStructure
-class SelectedTool implements ToolStructure {
+class MarkerTool implements MarkerStructure {
     thickness: number;
     name: string;
     button: HTMLButtonElement;
@@ -165,10 +167,8 @@ class SelectedTool implements ToolStructure {
 }
 
 // Structure for a sticker
-interface StickerToolStructure {
+interface StickerToolStructure extends BasicToolStructure {
     emoji: string;
-    button: HTMLButtonElement;
-    getButton(): HTMLButtonElement;
     getEmoji(): string;
 }
 
@@ -413,9 +413,9 @@ const stickersConfig = [
 ];
 
 // Create tools
-const toolData: { tools: SelectedTool[], currentTool: SelectedTool | null } = { tools: [], currentTool: null };
+const toolData: { tools: MarkerTool[], currentTool: MarkerTool | null } = { tools: [], currentTool: null };
 toolsConfig.forEach(({ thickness, name, offset }) => {
-  const tool = new SelectedTool(thickness, name, offset);
+  const tool = new MarkerTool(thickness, name, offset);
   toolData.tools.push(tool);
 });
 toolData.currentTool = toolData.tools[1];  // Default tool
